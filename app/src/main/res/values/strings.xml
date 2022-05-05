@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">My Application</string>
+    <string name="now_playing">Now Playing</string>
+    <string name="the_fratellis_costello_music">The Fratellis - Costello Music</string>
+    <string name="chelsea_dagger">Chelsea Dagger</string>
+    <string name="isRecording">Recording</string>
+</resources>
