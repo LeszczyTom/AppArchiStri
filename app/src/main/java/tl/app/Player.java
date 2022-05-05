@@ -2,19 +2,17 @@ package tl.app;
 
 
 import android.media.AudioAttributes;
-import android.media.MediaPlayer;
 import android.widget.Toast;
-
-
 import java.io.IOException;
-import java.sql.SQLOutput;
 
-public class MyService implements MediaPlayer.OnPreparedListener {
-    MediaPlayer mediaPlayer = null;
+public class Player implements android.media.MediaPlayer.OnPreparedListener {
+    android.media.MediaPlayer mediaPlayer = null;
 
-    public void start() {
-        String url = "http://10.0.2.2:8080/stream.mp3"; // your URL here
-        mediaPlayer = new MediaPlayer();
+    public int start() {
+        //TODO: Modif pour le build en iplocalhost:port/stream.mp3
+        String url = "http://10.0.2.2:1245/stream.mp3"; // your URL here
+        mediaPlayer = new android.media.MediaPlayer();
+        mediaPlayer.reset();
         mediaPlayer.setAudioAttributes(
                 new AudioAttributes.Builder()
                         .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
@@ -26,16 +24,25 @@ public class MyService implements MediaPlayer.OnPreparedListener {
         } catch (IOException e) {
             Toast.makeText(MainActivity.getContext(), "Erreur connexion stream", Toast.LENGTH_SHORT).show();
             e.printStackTrace();
+            return 0;
         }
         mediaPlayer.setOnPreparedListener(this);
         System.out.println("Preparing media player");
         mediaPlayer.prepareAsync(); // prepare async to not block main thread
+        return 1;
     }
 
     /** Called when MediaPlayer is ready */
-    public void onPrepared(MediaPlayer player) {
+    public void onPrepared(android.media.MediaPlayer player) {
         System.out.println("Media player is prepared");
         player.start();
     }
 
+    public void stop() {
+        if (mediaPlayer != null) {
+            mediaPlayer.stop();
+            mediaPlayer.release();
+            mediaPlayer = null;
+        }
+    }
 }

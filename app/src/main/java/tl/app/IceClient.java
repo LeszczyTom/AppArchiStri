@@ -1,38 +1,44 @@
 package tl.app;
 
-public class IceClient {
-    public IceClient(String[] args) {
-        int status = 0;
-        java.util.List<String> extraArgs = new java.util.ArrayList<>();
 
-        try (com.zeroc.Ice.Communicator communicator = com.zeroc.Ice.Util.initialize(args, "config.client", extraArgs)) {
-            communicator.getProperties().setProperty("Ice.Default.Package", "com.zeroc.demos.IceGrid.simple");
+import android.os.AsyncTask;
 
-            if (!extraArgs.isEmpty()) {
-                System.err.println("too many arguments");
-                status = 1;
-            } else {
-                status = run(communicator);
+import com.zeroc.Ice.InitializationData;
+import com.zeroc.Ice.Properties;
+import com.zeroc.Ice.Util;
+
+public class IceClient extends AsyncTask<Void, Void, Void> {
+
+    PlayerCommandsPrx player = null;
+
+    @Override
+    protected Void doInBackground(Void... voids) {
+        InitializationData initData = new InitializationData();
+        Properties properties = Util.createProperties();
+        properties.setProperty("Ice.Default.Locator", "IceGrid/Locator:tcp -h 192.168.1.19 -p 12000");
+        properties.setProperty("Ice.Trace.Network", "2");
+        initData.properties = properties;
+
+        try (com.zeroc.Ice.Communicator communicator = com.zeroc.Ice.Util.initialize(initData)) {
+            communicator.getProperties().setProperty("Ice.Default.Package", "tl.app");
+
+            System.out.println("trying to connect to player");
+
+            try {
+                player = PlayerCommandsPrx.checkedCast(communicator.stringToProxy("player1@Serv1.PlayerAdapter"));
+            } catch (com.zeroc.Ice.NotRegisteredException ex) {
+                System.out.println(ex.getMessage());
+            }
+            if (player == null) {
+                System.err.println("couldn't find a `::Demo::Hello' object");
             }
         }
+        return null;
     }
 
-    private static int run (com.zeroc.Ice.Communicator communicator){
-        //
-        // First we try to connect to the object with the `hello'
-        // identity. If it's not registered with the registry, we
-        // search for an object with the ::Demo::Hello type.
-        //
-        tl.PlayerCommandsPrx player = null;
-        try {
-            player = tl.PlayerCommandsPrx.checkedCast(communicator.stringToProxy("hello"));
-        } catch (com.zeroc.Ice.NotRegisteredException ex) {
-            System.out.println(ex.getMessage());
-        }
-        if (player == null) {
-            System.err.println("couldn't find a `::Demo::Hello' object");
-            return 1;
-        }
-        return 0;
+    public void play(boolean play) {
+        player.play(play);
+        Player myService = new Player();
+        System.out.println(myService.start());
     }
 }

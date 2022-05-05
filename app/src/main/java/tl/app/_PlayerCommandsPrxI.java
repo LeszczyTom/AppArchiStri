@@ -13,7 +13,7 @@
 // </auto-generated>
 //
 
-package tl;
+package tl.app;
 
 /** @hidden */
 public class _PlayerCommandsPrxI extends com.zeroc.Ice._ObjectPrxI implements PlayerCommandsPrx

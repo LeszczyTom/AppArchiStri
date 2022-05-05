@@ -13,7 +13,7 @@
 // </auto-generated>
 //
 
-package tl;
+package tl.app;
 
 public interface PlayerCommands extends com.zeroc.Ice.Object
 {
