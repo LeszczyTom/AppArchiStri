@@ -4,38 +4,26 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
-
 import android.Manifest;
 import android.content.Context;
-import android.content.pm.PackageManager;
-import android.content.res.Resources;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
+import android.content.pm.PackageManager;;
 import android.media.MediaRecorder;
-import android.os.AsyncTask;
 import android.os.Bundle;
-import android.os.Handler;
-import android.os.Looper;
+import android.os.StrictMode;
 import android.util.AttributeSet;
 import android.view.View;
+import android.widget.Button;
 import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.TextView;
-import android.widget.Toast;
-
 import com.zeroc.Ice.Communicator;
 import com.zeroc.Ice.InitializationData;
 import com.zeroc.Ice.NotRegisteredException;
 import com.zeroc.Ice.Properties;
 import com.zeroc.Ice.Util;
-
 import java.io.IOException;
-import java.io.InputStream;
-import java.net.URL;
-import java.util.concurrent.Executor;
-import java.util.concurrent.Executors;
-import java.util.concurrent.atomic.AtomicReference;
-
+import java.util.List;
+import org.apache.commons.text.similarity.LevenshteinDistance;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -44,18 +32,36 @@ public class MainActivity extends AppCompatActivity {
     private ImageView albumImage;
     private TextView isRecordingText;
     private ImageButton recordButton;
+    private Button play;
 
     private boolean isRecording = false;
-    Player player;
+    private boolean isPlaying = false;
+    private Player songPlayer;
+    private int currentServer = 0;
+
+    private MediaRecorder recorder = null;
+
+    private List<Song> songs;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        StrictMode.ThreadPolicy policy = new StrictMode.ThreadPolicy.Builder().permitAll().build();
+        StrictMode.setThreadPolicy(policy);
+
         setContentView(R.layout.activity_main);
         titleText = findViewById(R.id.titleText);
         artistText = findViewById(R.id.artistText);
         albumImage = findViewById(R.id.albumImage);
         isRecordingText = findViewById(R.id.isRecording);
         recordButton = findViewById(R.id.recordButton);
+        play = findViewById(R.id.play);
+
+        play.setOnClickListener(v -> {
+            play(!isPlaying, currentServer);
+            isPlaying = !isPlaying;
+        });
 
         recordButton.setOnClickListener(v -> {
             if (!isRecording) {
@@ -73,7 +79,15 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        test();
+        songs = RequestFromAPI.getAllFromDb();
+
+        updateUI(songs.get(0));
+
+
+        Result res = new Result ("play", "Digital Love");
+        System.out.println(java.time.LocalTime.now());
+        playRightSong(res.getObet());
+        System.out.println(java.time.LocalTime.now());
     }
 
     @Nullable
@@ -82,16 +96,16 @@ public class MainActivity extends AppCompatActivity {
         return super.onCreateView(name, context, attrs);
     }
 
-    private void test() {
-        titleText.setText("test");
-        artistText.setText("test");
-        new DownloadImageTask(albumImage).execute("https://picsum.photos/200");
+    private void updateUI(Song song) {
+        System.out.println("Song: " + song.toString());
+        String title = song.getSongTitle();
+        String artist = song.getArtist() + " - " + song.getAlbum();
+        String image = song.getCover();
 
-        //play(false);
-        playSong("Music-Sounds-Better-With-You.mp3");
+        titleText.setText(title);
+        artistText.setText(artist);
+        new DownloadImageTask(albumImage).execute(image);
     }
-
-    private MediaRecorder recorder = null;
 
     private void startRecording() {
         recorder = new MediaRecorder();
@@ -120,7 +134,24 @@ public class MainActivity extends AppCompatActivity {
         return getContext();
     }
 
-    public void playSong(String path) {
+    public void playRightSong(String object) {
+        LevenshteinDistance ld = new LevenshteinDistance();
+        int minDistance = Integer.MAX_VALUE;
+        Song song = songs.get(0);
+
+        for(Song s : songs) {
+            int tmp = ld.apply(object, s.getSongTitle());
+            if(tmp < minDistance) {
+                song = s;
+                minDistance = tmp;
+            }
+        }
+        currentServer = Integer.parseInt(song.getServerId());
+        playSong(song.getUri(), Integer.parseInt(song.getServerId()));
+        updateUI(song);
+    }
+
+    public void playSong(String path, int serverId) {
         new Thread(() -> {
             InitializationData initData = new InitializationData();
             Properties properties = Util.createProperties();
@@ -135,24 +166,35 @@ public class MainActivity extends AppCompatActivity {
                 PlayerCommandsPrx player = null;
 
                 try {
-                    player = PlayerCommandsPrx.checkedCast(communicator.stringToProxy("player1@Serv1.PlayerAdapter"));
+                    if(serverId == 0) {
+                        player = PlayerCommandsPrx.checkedCast(communicator.stringToProxy("player1@Serv1.PlayerAdapter"));
+                    } else {
+                        player = PlayerCommandsPrx.checkedCast(communicator.stringToProxy("player2@Serv2.PlayerAdapter"));
+                    }
                 } catch (NotRegisteredException ex) {
                     System.out.println(ex.getMessage());
                 }
                 if (player == null) {
                     System.err.println("couldn't find a `::Demo::Hello' object");
-                } else {
-                    player.playSong(path);
-                    if(this.player == null) {
-                        this.player = new Player();
-                    }
-                    this.player.start();
                 }
+
+                if(player != null) player.playSong(path);
+
+                if (songPlayer == null) {
+                    songPlayer = new Player();
+                }
+                if(serverId == 0) {
+                    songPlayer.start("1245");
+                } else {
+                    songPlayer.start("1246");
+                }
+                isPlaying = true;
+                communicator.destroy();
             }
         }).start();
     }
 
-    public void play(boolean play) {
+    public void play(boolean play, int serverId) {
         new Thread(() -> {
             InitializationData initData = new InitializationData();
             Properties properties = Util.createProperties();
@@ -175,11 +217,17 @@ public class MainActivity extends AppCompatActivity {
                     System.err.println("couldn't find a `::Demo::Hello' object");
                 } else {
                     player.play(play);
-                    if(this.player == null && play) {
-                        this.player = new Player();
-                        this.player.start();
+                    isPlaying = play;
+                    if(songPlayer == null && play) {
+                        songPlayer = new Player();
+                        if(serverId == 0) {
+                            songPlayer.start("1245");
+                        } else {
+                            songPlayer.start("1246");
+                        }
                     }
                 }
+                communicator.destroy();
             }
         }).start();
 

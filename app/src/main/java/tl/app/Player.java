@@ -8,9 +8,9 @@ import java.io.IOException;
 public class Player implements android.media.MediaPlayer.OnPreparedListener {
     android.media.MediaPlayer mediaPlayer = null;
 
-    public int start() {
+    public int start(String port) {
         //TODO: Modif pour le build en iplocalhost:port/stream.mp3
-        String url = "http://10.0.2.2:1245/stream.mp3"; // your URL here
+        String url = "http://10.0.2.2:" + port + "/stream.mp3"; // your URL here
         mediaPlayer = new android.media.MediaPlayer();
         mediaPlayer.reset();
         mediaPlayer.setAudioAttributes(
