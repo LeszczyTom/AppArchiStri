@@ -33,6 +33,8 @@ public class MainActivity extends AppCompatActivity {
     private TextView isRecordingText;
     private ImageButton recordButton;
     private Button play;
+    private TextView ou;
+
 
     private boolean isRecording = false;
     private boolean isPlaying = false;
@@ -43,6 +45,8 @@ public class MainActivity extends AppCompatActivity {
     private MediaRecorder recorder = null;
 
     private List<Song> songs;
+
+    public static final String ADDRESS = "http://192.168.1.19:";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -58,6 +62,8 @@ public class MainActivity extends AppCompatActivity {
         isRecordingText = findViewById(R.id.isRecording);
         recordButton = findViewById(R.id.recordButton);
         play = findViewById(R.id.play);
+        ou = findViewById(R.id.ou);
+
 
         play.setOnClickListener(v -> {
             Result res = new Result ("stop");
@@ -84,7 +90,6 @@ public class MainActivity extends AppCompatActivity {
         songs = RequestFromAPI.getAllFromDb();
 
         updateUI(songs.get(0));
-
 
         Result res = new Result ("play", "Digital Love");
         //Result res = new Result("pause");
@@ -212,12 +217,13 @@ public class MainActivity extends AppCompatActivity {
                 }
 
                 if(songPlayer != null) songPlayer.stop();
-                songPlayer = new Player();
 
                 if(serverId == 0) {
-                    songPlayer.start("1245");
+                    songPlayer = new Player("1245");
+                    new Thread(songPlayer).start();
                 } else {
-                    songPlayer.start("1246");
+                    songPlayer = new Player("1246");
+                    new Thread(songPlayer).start();
                 }
                 isPlaying = true;
                 communicator.destroy();
@@ -254,11 +260,13 @@ public class MainActivity extends AppCompatActivity {
 
                     isPlaying = play;
                     if(songPlayer == null && play) {
-                        songPlayer = new Player();
+
                         if(serverId == 0) {
-                            songPlayer.start("1245");
+                            songPlayer = new Player("1245");
+                            new Thread(songPlayer).start();
                         } else {
-                            songPlayer.start("1246");
+                            songPlayer = new Player("1246");
+                            new Thread(songPlayer).start();
                         }
                     }
                 }

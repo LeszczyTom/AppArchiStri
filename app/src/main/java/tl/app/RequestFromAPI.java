@@ -13,7 +13,7 @@ import java.util.List;
 
 public class RequestFromAPI {
 
-    private static final String HOST = "http://192.168.1.19:2222/";
+    private static final String HOST = MainActivity.ADDRESS + "2222/";
 
     public static List<Song> getAllFromDb() {
         List<Song> songs = new ArrayList<>();
