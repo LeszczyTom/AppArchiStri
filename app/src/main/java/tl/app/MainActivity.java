@@ -38,6 +38,7 @@ public class MainActivity extends AppCompatActivity {
     private boolean isPlaying = false;
     private Player songPlayer;
     private int currentServer = 0;
+    private int volume = 50;
 
     private MediaRecorder recorder = null;
 
@@ -59,7 +60,8 @@ public class MainActivity extends AppCompatActivity {
         play = findViewById(R.id.play);
 
         play.setOnClickListener(v -> {
-            play(!isPlaying, currentServer);
+            Result res = new Result ("stop");
+            processAction(res);
             isPlaying = !isPlaying;
         });
 
@@ -85,15 +87,38 @@ public class MainActivity extends AppCompatActivity {
 
 
         Result res = new Result ("play", "Digital Love");
-        System.out.println(java.time.LocalTime.now());
-        playRightSong(res.getObet());
-        System.out.println(java.time.LocalTime.now());
+        //Result res = new Result("pause");
+        processAction(res);
     }
 
     @Nullable
     @Override
     public View onCreateView(@NonNull String name, @NonNull Context context, @NonNull AttributeSet attrs) {
         return super.onCreateView(name, context, attrs);
+    }
+
+    private void processAction(Result res) {
+        if ("play".equals(res.getAction())) {
+            playRightSong(res.getObet());
+        } else if ("pause".equals(res.getAction())) {
+            play(false, currentServer);
+        } else if ("volumedown".equals(res.getAction())) {
+            volume -= 10;
+            if (volume < 0) volume = 0;
+            changeVolume(volume, currentServer);
+        } else if ("resume".equals(res.getAction())) {
+            play(true, currentServer);
+        } else if ("volumeup".equals(res.getAction())) {
+            volume += 10;
+            if (volume > 100) volume = 100;
+            changeVolume(volume, currentServer);
+        } else if ("forward".equals(res.getAction())) {
+            System.out.println("forward");
+        } else if ("backward".equals(res.getAction())) {
+            System.out.println("backward");
+        } else if ("stop".equals(res.getAction())) {
+            stop(currentServer);
+        }
     }
 
     private void updateUI(Song song) {
@@ -128,6 +153,8 @@ public class MainActivity extends AppCompatActivity {
         recorder.stop();
         recorder.release();
         recorder = null;
+
+        //send to voice
     }
 
     public static Context getContext() {
@@ -163,26 +190,30 @@ public class MainActivity extends AppCompatActivity {
                 communicator.getProperties().setProperty("Ice.Default.Package", "tl.app");
 
                 System.out.println("trying to connect to player");
-                PlayerCommandsPrx player = null;
+                PlayerCommandsPrx player1 = null;
+                PlayerCommandsPrx player2 = null;
 
                 try {
-                    if(serverId == 0) {
-                        player = PlayerCommandsPrx.checkedCast(communicator.stringToProxy("player1@Serv1.PlayerAdapter"));
-                    } else {
-                        player = PlayerCommandsPrx.checkedCast(communicator.stringToProxy("player2@Serv2.PlayerAdapter"));
-                    }
+                    player1 = PlayerCommandsPrx.checkedCast(communicator.stringToProxy("player1@Serv1.PlayerAdapter"));
+                    player2 = PlayerCommandsPrx.checkedCast(communicator.stringToProxy("player2@Serv2.PlayerAdapter"));
                 } catch (NotRegisteredException ex) {
                     System.out.println(ex.getMessage());
                 }
-                if (player == null) {
-                    System.err.println("couldn't find a `::Demo::Hello' object");
+                if (player1 == null && player2 == null) {
+                    System.err.println("error: invalid proxy");
                 }
 
-                if(player != null) player.playSong(path);
-
-                if (songPlayer == null) {
-                    songPlayer = new Player();
+                if(serverId == 0) {
+                    if (player1 != null) player1.playSong(path);
+                    if (player2 != null) player2.play(false);
+                } else {
+                    if (player2 != null) player2.playSong(path);
+                    if (player1 != null) player1.play(false);
                 }
+
+                if(songPlayer != null) songPlayer.stop();
+                songPlayer = new Player();
+
                 if(serverId == 0) {
                     songPlayer.start("1245");
                 } else {
@@ -206,17 +237,21 @@ public class MainActivity extends AppCompatActivity {
                 communicator.getProperties().setProperty("Ice.Default.Package", "tl.app");
 
                 System.out.println("trying to connect to player");
-                PlayerCommandsPrx player = null;
+                PlayerCommandsPrx player1 = null;
+                PlayerCommandsPrx player2 = null;
 
                 try {
-                    player = PlayerCommandsPrx.checkedCast(communicator.stringToProxy("player1@Serv1.PlayerAdapter"));
+                    player1 = PlayerCommandsPrx.checkedCast(communicator.stringToProxy("player1@Serv1.PlayerAdapter"));
+                    player2 = PlayerCommandsPrx.checkedCast(communicator.stringToProxy("player2@Serv2.PlayerAdapter"));
                 } catch (NotRegisteredException ex) {
                     System.out.println(ex.getMessage());
                 }
-                if (player == null) {
-                    System.err.println("couldn't find a `::Demo::Hello' object");
+                if (player1 == null || player2 == null) {
+                    System.err.println("error: invalid proxy");
                 } else {
-                    player.play(play);
+                    if(serverId == 0) player1.play(play);
+                    else player2.play(play);
+
                     isPlaying = play;
                     if(songPlayer == null && play) {
                         songPlayer = new Player();
@@ -230,6 +265,70 @@ public class MainActivity extends AppCompatActivity {
                 communicator.destroy();
             }
         }).start();
+    }
 
+    public void stop(int serverId) {
+        new Thread(() -> {
+            InitializationData initData = new InitializationData();
+            Properties properties = Util.createProperties();
+            properties.setProperty("Ice.Default.Locator", "IceGrid/Locator:tcp -h 192.168.1.19 -p 12000");
+            properties.setProperty("Ice.Trace.Network", "2");
+            initData.properties = properties;
+
+            try (Communicator communicator = Util.initialize(initData)) {
+                communicator.getProperties().setProperty("Ice.Default.Package", "tl.app");
+
+                System.out.println("trying to connect to player");
+                PlayerCommandsPrx player1 = null;
+                PlayerCommandsPrx player2 = null;
+
+                try {
+                    player1 = PlayerCommandsPrx.checkedCast(communicator.stringToProxy("player1@Serv1.PlayerAdapter"));
+                    player2 = PlayerCommandsPrx.checkedCast(communicator.stringToProxy("player2@Serv2.PlayerAdapter"));
+                } catch (NotRegisteredException ex) {
+                    System.out.println(ex.getMessage());
+                }
+                if (player1 == null || player2 == null) {
+                    System.err.println("error: invalid proxy");
+                } else {
+                    if(serverId == 0) player1.stop();
+                    else player2.stop();
+
+                }
+                communicator.destroy();
+            }
+        }).start();
+    }
+
+    public void changeVolume(int volume, int serverId) {
+        new Thread(() -> {
+            InitializationData initData = new InitializationData();
+            Properties properties = Util.createProperties();
+            properties.setProperty("Ice.Default.Locator", "IceGrid/Locator:tcp -h 192.168.1.19 -p 12000");
+            properties.setProperty("Ice.Trace.Network", "2");
+            initData.properties = properties;
+
+            try (Communicator communicator = Util.initialize(initData)) {
+                communicator.getProperties().setProperty("Ice.Default.Package", "tl.app");
+
+                System.out.println("trying to connect to player");
+                PlayerCommandsPrx player1 = null;
+                PlayerCommandsPrx player2 = null;
+
+                try {
+                    player1 = PlayerCommandsPrx.checkedCast(communicator.stringToProxy("player1@Serv1.PlayerAdapter"));
+                    player2 = PlayerCommandsPrx.checkedCast(communicator.stringToProxy("player2@Serv2.PlayerAdapter"));
+                } catch (NotRegisteredException ex) {
+                    System.out.println(ex.getMessage());
+                }
+                if (player1 == null || player2 == null) {
+                    System.err.println("error: invalid proxy");
+                } else {
+                    if(serverId == 0) player1.volume(volume);
+                    else player2.volume(volume);
+                }
+                communicator.destroy();
+            }
+        }).start();
     }
 }
