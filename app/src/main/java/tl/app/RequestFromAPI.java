@@ -17,6 +17,7 @@ public class RequestFromAPI {
 
     public static List<Song> getAllFromDb() {
         List<Song> songs = new ArrayList<>();
+        System.out.println(HOST);
         try{
             URL url = new URL(HOST + "selectAllFromDB");
             HttpURLConnection http = (HttpURLConnection) url.openConnection();

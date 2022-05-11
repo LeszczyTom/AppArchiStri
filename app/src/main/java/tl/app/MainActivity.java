@@ -13,6 +13,7 @@ import android.os.StrictMode;
 import android.util.AttributeSet;
 import android.view.View;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.TextView;
@@ -21,9 +22,24 @@ import com.zeroc.Ice.InitializationData;
 import com.zeroc.Ice.NotRegisteredException;
 import com.zeroc.Ice.Properties;
 import com.zeroc.Ice.Util;
+
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.Base64;
 import java.util.List;
 import org.apache.commons.text.similarity.LevenshteinDistance;
+import org.json.JSONObject;
+import org.junit.Test;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -32,26 +48,28 @@ public class MainActivity extends AppCompatActivity {
     private ImageView albumImage;
     private TextView isRecordingText;
     private ImageButton recordButton;
-    private Button play;
-    private TextView ou;
-
+    private EditText requeteText;
+    private Button requeteButton;
 
     private boolean isRecording = false;
     private boolean isPlaying = false;
-    private Player songPlayer;
-    private int currentServer = 0;
-    private int volume = 50;
 
+    public static Context context;
     private MediaRecorder recorder = null;
+
+    public static Player player = null;
 
     private List<Song> songs;
 
-    public static final String ADDRESS = "http://192.168.1.19:";
+    public static final String ADDRESS = "http://167.172.187.86:";
+    LinkIce linkIce = new LinkIce();
+    NLP nlp = new NLP();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
+        context = getApplicationContext();
         StrictMode.ThreadPolicy policy = new StrictMode.ThreadPolicy.Builder().permitAll().build();
         StrictMode.setThreadPolicy(policy);
 
@@ -61,14 +79,16 @@ public class MainActivity extends AppCompatActivity {
         albumImage = findViewById(R.id.albumImage);
         isRecordingText = findViewById(R.id.isRecording);
         recordButton = findViewById(R.id.recordButton);
-        play = findViewById(R.id.play);
-        ou = findViewById(R.id.ou);
+        requeteText = findViewById(R.id.requeteText);
+        requeteButton = findViewById(R.id.requeteBtn);
 
-
-        play.setOnClickListener(v -> {
-            Result res = new Result ("stop");
-            processAction(res);
-            isPlaying = !isPlaying;
+        requeteButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                Result res = nlp.coupleActionObjetDepuisPhrase(requeteText.getText().toString());
+                Song tmp = linkIce.action(res);
+                if (tmp != null) updateUI(tmp);
+            }
         });
 
         recordButton.setOnClickListener(v -> {
@@ -88,42 +108,13 @@ public class MainActivity extends AppCompatActivity {
         });
 
         songs = RequestFromAPI.getAllFromDb();
-
-        updateUI(songs.get(0));
-
-        Result res = new Result ("play", "Digital Love");
-        //Result res = new Result("pause");
-        processAction(res);
+        linkIce.songs = songs;
     }
 
     @Nullable
     @Override
     public View onCreateView(@NonNull String name, @NonNull Context context, @NonNull AttributeSet attrs) {
         return super.onCreateView(name, context, attrs);
-    }
-
-    private void processAction(Result res) {
-        if ("play".equals(res.getAction())) {
-            playRightSong(res.getObet());
-        } else if ("pause".equals(res.getAction())) {
-            play(false, currentServer);
-        } else if ("volumedown".equals(res.getAction())) {
-            volume -= 10;
-            if (volume < 0) volume = 0;
-            changeVolume(volume, currentServer);
-        } else if ("resume".equals(res.getAction())) {
-            play(true, currentServer);
-        } else if ("volumeup".equals(res.getAction())) {
-            volume += 10;
-            if (volume > 100) volume = 100;
-            changeVolume(volume, currentServer);
-        } else if ("forward".equals(res.getAction())) {
-            System.out.println("forward");
-        } else if ("backward".equals(res.getAction())) {
-            System.out.println("backward");
-        } else if ("stop".equals(res.getAction())) {
-            stop(currentServer);
-        }
     }
 
     private void updateUI(Song song) {
@@ -159,184 +150,73 @@ public class MainActivity extends AppCompatActivity {
         recorder.release();
         recorder = null;
 
+        voiceToText();
         //send to voice
     }
 
     public static Context getContext() {
-        return getContext();
+        return context;
     }
 
-    public void playRightSong(String object) {
-        LevenshteinDistance ld = new LevenshteinDistance();
-        int minDistance = Integer.MAX_VALUE;
-        Song song = songs.get(0);
+    public void voiceToText() {
+        try{
+            URL url = new URL("http://pedago.univ-avignon.fr:3147/speechToText");
+            HttpURLConnection http = (HttpURLConnection) url.openConnection();
+            http.setRequestMethod("POST");
+            http.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
+            http.setDoOutput(true);
 
-        for(Song s : songs) {
-            int tmp = ld.apply(object, s.getSongTitle());
-            if(tmp < minDistance) {
-                song = s;
-                minDistance = tmp;
+
+            Path path = Paths.get(getExternalCacheDir().getAbsolutePath() + "/audiorecordtest.3gp");
+            byte[] audio = new byte[0];
+
+            try {
+                audio = Files.readAllBytes(path);
+            } catch (IOException e) {
+                e.printStackTrace();
             }
+
+            String audioByteString = Base64.getEncoder().encodeToString(audio);
+
+            String jsonString = new JSONObject()
+                    .put("audioEncoded", audioByteString)
+                    .toString();
+
+            System.out.println(jsonString);
+
+            try(OutputStream os = http.getOutputStream()) {
+                byte[] input = jsonString.getBytes(StandardCharsets.UTF_8);
+                os.write(input, 0, input.length);
+            }
+
+            http.connect();
+
+            try(BufferedReader br = new BufferedReader(
+                    new InputStreamReader(http.getInputStream(), StandardCharsets.UTF_8))) {
+                StringBuilder response = new StringBuilder();
+                String responseLine = null;
+                while ((responseLine = br.readLine()) != null) {
+                    response.append(responseLine.trim());
+                }
+                System.out.println(response);
+
+                String[] result = response.toString().split("\\\\");
+                String actionObjet = result[0].substring(1, result[0].length() - 1);
+                System.out.println(actionObjet);
+                String[] ao = actionObjet.split(",");
+                String action = ao[0];
+                String objet = ao[1].substring(0, ao[1].length() - 1);
+
+                isRecordingText.setText(result[1]);
+                Song tmp = linkIce.action(new Result(action, objet));
+                if (tmp != null) updateUI(tmp);
+            }
+            http.disconnect();
+
+        } catch (Exception e) {
+            System.out.println("ERORRRRR ");
+            System.out.println(e.getMessage());
+            e.printStackTrace();
         }
-        currentServer = Integer.parseInt(song.getServerId());
-        playSong(song.getUri(), Integer.parseInt(song.getServerId()));
-        updateUI(song);
-    }
-
-    public void playSong(String path, int serverId) {
-        new Thread(() -> {
-            InitializationData initData = new InitializationData();
-            Properties properties = Util.createProperties();
-            properties.setProperty("Ice.Default.Locator", "IceGrid/Locator:tcp -h 192.168.1.19 -p 12000");
-            properties.setProperty("Ice.Trace.Network", "2");
-            initData.properties = properties;
-
-            try (Communicator communicator = Util.initialize(initData)) {
-                communicator.getProperties().setProperty("Ice.Default.Package", "tl.app");
-
-                System.out.println("trying to connect to player");
-                PlayerCommandsPrx player1 = null;
-                PlayerCommandsPrx player2 = null;
-
-                try {
-                    player1 = PlayerCommandsPrx.checkedCast(communicator.stringToProxy("player1@Serv1.PlayerAdapter"));
-                    player2 = PlayerCommandsPrx.checkedCast(communicator.stringToProxy("player2@Serv2.PlayerAdapter"));
-                } catch (NotRegisteredException ex) {
-                    System.out.println(ex.getMessage());
-                }
-                if (player1 == null && player2 == null) {
-                    System.err.println("error: invalid proxy");
-                }
-
-                if(serverId == 0) {
-                    if (player1 != null) player1.playSong(path);
-                    if (player2 != null) player2.play(false);
-                } else {
-                    if (player2 != null) player2.playSong(path);
-                    if (player1 != null) player1.play(false);
-                }
-
-                if(songPlayer != null) songPlayer.stop();
-
-                if(serverId == 0) {
-                    songPlayer = new Player("1245");
-                    new Thread(songPlayer).start();
-                } else {
-                    songPlayer = new Player("1246");
-                    new Thread(songPlayer).start();
-                }
-                isPlaying = true;
-                communicator.destroy();
-            }
-        }).start();
-    }
-
-    public void play(boolean play, int serverId) {
-        new Thread(() -> {
-            InitializationData initData = new InitializationData();
-            Properties properties = Util.createProperties();
-            properties.setProperty("Ice.Default.Locator", "IceGrid/Locator:tcp -h 192.168.1.19 -p 12000");
-            properties.setProperty("Ice.Trace.Network", "2");
-            initData.properties = properties;
-
-            try (Communicator communicator = Util.initialize(initData)) {
-                communicator.getProperties().setProperty("Ice.Default.Package", "tl.app");
-
-                System.out.println("trying to connect to player");
-                PlayerCommandsPrx player1 = null;
-                PlayerCommandsPrx player2 = null;
-
-                try {
-                    player1 = PlayerCommandsPrx.checkedCast(communicator.stringToProxy("player1@Serv1.PlayerAdapter"));
-                    player2 = PlayerCommandsPrx.checkedCast(communicator.stringToProxy("player2@Serv2.PlayerAdapter"));
-                } catch (NotRegisteredException ex) {
-                    System.out.println(ex.getMessage());
-                }
-                if (player1 == null || player2 == null) {
-                    System.err.println("error: invalid proxy");
-                } else {
-                    if(serverId == 0) player1.play(play);
-                    else player2.play(play);
-
-                    isPlaying = play;
-                    if(songPlayer == null && play) {
-
-                        if(serverId == 0) {
-                            songPlayer = new Player("1245");
-                            new Thread(songPlayer).start();
-                        } else {
-                            songPlayer = new Player("1246");
-                            new Thread(songPlayer).start();
-                        }
-                    }
-                }
-                communicator.destroy();
-            }
-        }).start();
-    }
-
-    public void stop(int serverId) {
-        new Thread(() -> {
-            InitializationData initData = new InitializationData();
-            Properties properties = Util.createProperties();
-            properties.setProperty("Ice.Default.Locator", "IceGrid/Locator:tcp -h 192.168.1.19 -p 12000");
-            properties.setProperty("Ice.Trace.Network", "2");
-            initData.properties = properties;
-
-            try (Communicator communicator = Util.initialize(initData)) {
-                communicator.getProperties().setProperty("Ice.Default.Package", "tl.app");
-
-                System.out.println("trying to connect to player");
-                PlayerCommandsPrx player1 = null;
-                PlayerCommandsPrx player2 = null;
-
-                try {
-                    player1 = PlayerCommandsPrx.checkedCast(communicator.stringToProxy("player1@Serv1.PlayerAdapter"));
-                    player2 = PlayerCommandsPrx.checkedCast(communicator.stringToProxy("player2@Serv2.PlayerAdapter"));
-                } catch (NotRegisteredException ex) {
-                    System.out.println(ex.getMessage());
-                }
-                if (player1 == null || player2 == null) {
-                    System.err.println("error: invalid proxy");
-                } else {
-                    if(serverId == 0) player1.stop();
-                    else player2.stop();
-
-                }
-                communicator.destroy();
-            }
-        }).start();
-    }
-
-    public void changeVolume(int volume, int serverId) {
-        new Thread(() -> {
-            InitializationData initData = new InitializationData();
-            Properties properties = Util.createProperties();
-            properties.setProperty("Ice.Default.Locator", "IceGrid/Locator:tcp -h 192.168.1.19 -p 12000");
-            properties.setProperty("Ice.Trace.Network", "2");
-            initData.properties = properties;
-
-            try (Communicator communicator = Util.initialize(initData)) {
-                communicator.getProperties().setProperty("Ice.Default.Package", "tl.app");
-
-                System.out.println("trying to connect to player");
-                PlayerCommandsPrx player1 = null;
-                PlayerCommandsPrx player2 = null;
-
-                try {
-                    player1 = PlayerCommandsPrx.checkedCast(communicator.stringToProxy("player1@Serv1.PlayerAdapter"));
-                    player2 = PlayerCommandsPrx.checkedCast(communicator.stringToProxy("player2@Serv2.PlayerAdapter"));
-                } catch (NotRegisteredException ex) {
-                    System.out.println(ex.getMessage());
-                }
-                if (player1 == null || player2 == null) {
-                    System.err.println("error: invalid proxy");
-                } else {
-                    if(serverId == 0) player1.volume(volume);
-                    else player2.volume(volume);
-                }
-                communicator.destroy();
-            }
-        }).start();
     }
 }

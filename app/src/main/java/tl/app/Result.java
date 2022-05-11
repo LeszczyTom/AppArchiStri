@@ -31,7 +31,7 @@ public class Result {
         return action;
     }
 
-    public String getObet() {
+    public String getObjet() {
         return objet;
     }
 
